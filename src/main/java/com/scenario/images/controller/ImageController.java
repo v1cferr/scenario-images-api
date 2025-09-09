@@ -239,6 +239,29 @@ public class ImageController {
     }
 
     /**
+     * Deletar todas as imagens de um ambiente
+     */
+    @DeleteMapping("/environment/{environmentId}")
+    @Operation(summary = "Deletar todas as imagens de um ambiente", 
+               description = "Remove todas as imagens de um ambiente específico. Requer autenticação.",
+               security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<?> deleteAllImagesByEnvironment(
+            @Parameter(description = "ID do ambiente") @PathVariable Long environmentId) {
+        try {
+            int deletedCount = imageService.deleteAllImagesByEnvironment(environmentId);
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Imagens do ambiente deletadas com sucesso");
+            response.put("deletedCount", deletedCount);
+            return ResponseEntity.ok(response);
+        } catch (IOException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Erro ao deletar imagens do ambiente");
+            error.put("message", e.getMessage());
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
+    /**
      * Contar imagens de um ambiente
      */
     @GetMapping("/environment/{environmentId}/count")

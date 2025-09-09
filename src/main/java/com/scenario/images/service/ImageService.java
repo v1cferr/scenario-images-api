@@ -189,9 +189,8 @@ public class ImageService {
             throw new RuntimeException("Nome da imagem é obrigatório");
         }
 
-        if (imageRepository.existsByEnvironmentIdAndImageName(environmentId, imageName)) {
-            throw new RuntimeException("Já existe uma imagem com este nome no ambiente");
-        }
+        // Removida validação de nome duplicado - permite múltiplas imagens com mesmo nome
+        // pois o arquivo físico terá UUID único
     }
 
     private String generateUniqueFileName(String originalFileName) {
@@ -199,6 +198,33 @@ public class ImageService {
         String uuid = UUID.randomUUID().toString().substring(0, 8);
         String extension = getFileExtension(originalFileName);
         return timestamp + "_" + uuid + extension;
+    }
+
+    /**
+     * Deletar todas as imagens de um ambiente
+     */
+    public int deleteAllImagesByEnvironment(Long environmentId) throws IOException {
+        List<EnvironmentImage> images = imageRepository.findByEnvironmentIdOrderByCreatedAtDesc(environmentId);
+        int deletedCount = 0;
+        
+        for (EnvironmentImage image : images) {
+            // Deletar arquivo físico
+            Path filePath = Paths.get(image.getFilePath());
+            if (Files.exists(filePath)) {
+                try {
+                    Files.delete(filePath);
+                } catch (IOException e) {
+                    // Log do erro mas continua deletando outros arquivos
+                    System.err.println("Erro ao deletar arquivo físico: " + filePath + " - " + e.getMessage());
+                }
+            }
+            
+            // Deletar registro do banco
+            imageRepository.delete(image);
+            deletedCount++;
+        }
+        
+        return deletedCount;
     }
 
     private String getFileExtension(String fileName) {
