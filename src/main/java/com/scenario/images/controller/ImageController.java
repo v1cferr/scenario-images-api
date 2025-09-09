@@ -1,7 +1,13 @@
 package com.scenario.images.controller;
 
 import com.scenario.images.model.EnvironmentImage;
+import com.scenario.images.security.JwtTokenProvider;
 import com.scenario.images.service.ImageService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -9,6 +15,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,19 +30,27 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/images")
 @CrossOrigin(origins = "*")
+@Tag(name = "Gerenciamento de Imagens", description = "Endpoints para upload, download e gerenciamento de imagens")
 public class ImageController {
 
     @Autowired
     private ImageService imageService;
 
+    @Autowired
+    private JwtTokenProvider tokenProvider;
+
     /**
      * Upload de imagem para um ambiente
      */
     @PostMapping("/upload")
+    @PreAuthorize("hasRole('UPLOAD')")
+    @Operation(summary = "Upload de imagem", 
+               description = "Faz upload de uma imagem para um ambiente específico. Requer token de edição.",
+               security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<?> uploadImage(
-            @RequestParam("environmentId") Long environmentId,
-            @RequestParam("imageName") String imageName,
-            @RequestParam("file") MultipartFile file) {
+            @Parameter(description = "ID do ambiente") @RequestParam("environmentId") Long environmentId,
+            @Parameter(description = "Nome da imagem") @RequestParam("imageName") String imageName,
+            @Parameter(description = "Arquivo da imagem") @RequestParam("file") MultipartFile file) {
         try {
             EnvironmentImage savedImage = imageService.uploadImage(environmentId, imageName, file);
             return ResponseEntity.status(HttpStatus.CREATED).body(savedImage);
@@ -55,7 +71,10 @@ public class ImageController {
      * Buscar todas as imagens de um ambiente
      */
     @GetMapping("/environment/{environmentId}")
-    public ResponseEntity<List<EnvironmentImage>> getImagesByEnvironment(@PathVariable Long environmentId) {
+    @Operation(summary = "Listar imagens do ambiente", 
+               description = "Lista todas as imagens de um ambiente específico")
+    public ResponseEntity<List<EnvironmentImage>> getImagesByEnvironment(
+            @Parameter(description = "ID do ambiente") @PathVariable Long environmentId) {
         List<EnvironmentImage> images = imageService.getImagesByEnvironment(environmentId);
         return ResponseEntity.ok(images);
     }
@@ -96,8 +115,30 @@ public class ImageController {
      * Servir arquivo de imagem
      */
     @GetMapping("/file/{fileName}")
-    public ResponseEntity<Resource> getImageFile(@PathVariable String fileName) {
+    @Operation(summary = "Download de imagem", 
+               description = "Faz download de uma imagem. Requer token de download específico para o ambiente.",
+               security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<Resource> getImageFile(
+            @Parameter(description = "Nome do arquivo") @PathVariable String fileName,
+            HttpServletRequest request) {
         try {
+            // Verificar permissão de download
+            String token = getJwtFromRequest(request);
+            if (token == null || !tokenProvider.validateToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            // Buscar informações da imagem para verificar o ambiente
+            EnvironmentImage imageInfo = imageService.getImageInfoByFileName(fileName);
+            if (imageInfo == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // Verificar se o token permite download para este ambiente
+            if (!tokenProvider.canDownloadFromEnvironment(token, imageInfo.getEnvironmentId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+
             File file = imageService.getPhysicalFile(fileName);
             if (!file.exists()) {
                 return ResponseEntity.notFound().build();
@@ -144,7 +185,12 @@ public class ImageController {
      * Deletar imagem
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteImage(@PathVariable Long id) {
+    @PreAuthorize("hasRole('DELETE')")
+    @Operation(summary = "Deletar imagem", 
+               description = "Remove uma imagem do sistema. Requer token de edição.",
+               security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<?> deleteImage(
+            @Parameter(description = "ID da imagem") @PathVariable Long id) {
         try {
             boolean deleted = imageService.deleteImage(id);
             if (deleted) {
@@ -199,5 +245,14 @@ public class ImageController {
             return "image/webp";
         }
         return "application/octet-stream";
+    }
+
+    // Método auxiliar para extrair JWT do request
+    private String getJwtFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
     }
 }

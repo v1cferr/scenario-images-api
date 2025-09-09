@@ -144,6 +144,14 @@ public class ImageService {
     }
 
     /**
+     * Obter informações da imagem por nome do arquivo
+     */
+    @Transactional(readOnly = true)
+    public EnvironmentImage getImageInfoByFileName(String fileName) {
+        return imageRepository.findByFileName(fileName).orElse(null);
+    }
+
+    /**
      * Contar imagens por ambiente
      */
     @Transactional(readOnly = true)
