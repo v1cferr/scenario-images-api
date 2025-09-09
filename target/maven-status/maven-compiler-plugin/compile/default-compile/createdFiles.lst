@@ -1,13 +1,10 @@
 com\scenario\images\config\SwaggerConfig.class
-com\scenario\images\security\SecurityConfig.class
-com\scenario\images\controller\ImageController.class
-com\scenario\images\model\EnvironmentImage.class
-com\scenario\images\dto\EditLoginRequest.class
-com\scenario\images\security\JwtAuthenticationFilter.class
 com\scenario\images\ScenarioImagesApiApplication.class
 com\scenario\images\security\JwtTokenProvider.class
 com\scenario\images\service\ImageService.class
-com\scenario\images\dto\DownloadLoginRequest.class
+com\scenario\images\security\SecurityConfig.class
+com\scenario\images\controller\ImageController.class
+com\scenario\images\model\EnvironmentImage.class
 com\scenario\images\dto\JwtResponse.class
-com\scenario\images\controller\AuthController.class
+com\scenario\images\security\JwtAuthenticationFilter.class
 com\scenario\images\repository\EnvironmentImageRepository.class
