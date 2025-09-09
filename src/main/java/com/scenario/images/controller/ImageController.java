@@ -43,9 +43,8 @@ public class ImageController {
      * Upload de imagem para um ambiente
      */
     @PostMapping("/upload")
-    @PreAuthorize("hasRole('UPLOAD')")
     @Operation(summary = "Upload de imagem", 
-               description = "Faz upload de uma imagem para um ambiente específico. Requer token de edição.",
+               description = "Faz upload de uma imagem para um ambiente específico. Requer autenticação.",
                security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<?> uploadImage(
             @Parameter(description = "ID do ambiente") @RequestParam("environmentId") Long environmentId,
@@ -95,6 +94,41 @@ public class ImageController {
     }
 
     /**
+     * Download da primeira imagem de um ambiente
+     */
+    @GetMapping("/environment/{environmentId}/download")
+    @Operation(summary = "Download da imagem do ambiente", 
+               description = "Faz download da primeira imagem de um ambiente específico")
+    public ResponseEntity<Resource> downloadEnvironmentImage(
+            @Parameter(description = "ID do ambiente") @PathVariable Long environmentId) {
+        try {
+            // Buscar primeira imagem do ambiente
+            List<EnvironmentImage> images = imageService.getImagesByEnvironment(environmentId);
+            if (images.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            EnvironmentImage image = images.get(0); // Primeira imagem
+            File file = imageService.getPhysicalFile(image.getFileName());
+            if (!file.exists()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Resource resource = new FileSystemResource(file);
+            
+            // Determinar content type baseado na extensão
+            String contentType = determineContentType(image.getFileName());
+            
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + image.getFileName() + "\"")
+                    .body(resource);
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /**
      * Buscar imagem por nome em um ambiente específico
      */
     @GetMapping("/environment/{environmentId}/name/{imageName}")
@@ -132,11 +166,6 @@ public class ImageController {
             EnvironmentImage imageInfo = imageService.getImageInfoByFileName(fileName);
             if (imageInfo == null) {
                 return ResponseEntity.notFound().build();
-            }
-
-            // Verificar se o token permite download para este ambiente
-            if (!tokenProvider.canDownloadFromEnvironment(token, imageInfo.getEnvironmentId())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
 
             File file = imageService.getPhysicalFile(fileName);
@@ -185,9 +214,8 @@ public class ImageController {
      * Deletar imagem
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('DELETE')")
     @Operation(summary = "Deletar imagem", 
-               description = "Remove uma imagem do sistema. Requer token de edição.",
+               description = "Remove uma imagem do sistema. Requer autenticação.",
                security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<?> deleteImage(
             @Parameter(description = "ID da imagem") @PathVariable Long id) {

@@ -29,21 +29,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String jwt = getJwtFromRequest(request);
 
             if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
-                // Extrair permissões do token
-                var claims = tokenProvider.getClaimsFromToken(jwt);
-                @SuppressWarnings("unchecked")
-                List<String> permissions = (List<String>) claims.get("permissions");
+                // Extrair informações básicas do token
+                String username = tokenProvider.getUsernameFromToken(jwt);
                 
-                if (permissions != null) {
-                    List<SimpleGrantedAuthority> authorities = permissions.stream()
-                            .map(permission -> new SimpleGrantedAuthority("ROLE_" + permission))
-                            .collect(Collectors.toList());
+                // Criar autenticação simples com permissões padrão para usuários autenticados
+                List<SimpleGrantedAuthority> authorities = List.of(
+                    new SimpleGrantedAuthority("ROLE_USER"),
+                    new SimpleGrantedAuthority("ROLE_UPLOAD"),
+                    new SimpleGrantedAuthority("ROLE_DELETE")
+                );
 
-                    UsernamePasswordAuthenticationToken authentication = 
-                            new UsernamePasswordAuthenticationToken(claims.getSubject(), null, authorities);
-                    
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                }
+                UsernamePasswordAuthenticationToken authentication = 
+                        new UsernamePasswordAuthenticationToken(username, null, authorities);
+                
+                SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (Exception ex) {
             logger.error("Could not set user authentication in security context", ex);

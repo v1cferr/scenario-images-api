@@ -38,15 +38,16 @@ public class SecurityConfig {
                 .requestMatchers("/swagger-ui/**", "/api-docs/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()
                 
-                // Downloads protegidos por JWT específico
-                .requestMatchers(HttpMethod.GET, "/api/images/file/**").authenticated()
+                // Downloads de imagens públicos (para tags <img> funcionarem)
+                .requestMatchers(HttpMethod.GET, "/api/images/environment/*/download").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/images/file/**").permitAll()
                 
-                // Uploads e operações de edição
+                // Uploads e operações de edição protegidas
                 .requestMatchers(HttpMethod.POST, "/api/images/upload").authenticated()
                 .requestMatchers(HttpMethod.DELETE, "/api/images/**").authenticated()
                 .requestMatchers(HttpMethod.PATCH, "/api/images/**").authenticated()
                 
-                // Outros endpoints podem ser acessados com qualquer token válido
+                // Outros endpoints GET protegidos (metadados)
                 .requestMatchers(HttpMethod.GET, "/api/images/**").authenticated()
                 
                 // Qualquer outra requisição
