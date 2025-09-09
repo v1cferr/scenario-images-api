@@ -1,0 +1,5 @@
+com\scenario\images\model\EnvironmentImage.class
+com\scenario\images\ScenarioImagesApiApplication.class
+com\scenario\images\service\ImageService.class
+com\scenario\images\controller\ImageController.class
+com\scenario\images\repository\EnvironmentImageRepository.class
