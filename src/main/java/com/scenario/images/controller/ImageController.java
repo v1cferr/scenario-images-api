@@ -3,6 +3,7 @@ package com.scenario.images.controller;
 import com.scenario.images.model.EnvironmentImage;
 import com.scenario.images.security.JwtTokenProvider;
 import com.scenario.images.service.ImageService;
+import io.jsonwebtoken.Claims;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -15,7 +16,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -64,6 +64,25 @@ public class ImageController {
             error.put("message", e.getMessage());
             return ResponseEntity.internalServerError().body(error);
         }
+    }
+
+    /**
+     * Buscar todas as imagens de um ambiente (endpoint interno)
+     */
+    @GetMapping("/internal/environment/{environmentId}")
+    @Operation(summary = "Listar imagens do ambiente (interno)", 
+               description = "Lista todas as imagens de um ambiente específico - uso interno entre APIs")
+    public ResponseEntity<List<EnvironmentImage>> getImagesByEnvironmentInternal(
+            @Parameter(description = "ID do ambiente") @PathVariable Long environmentId,
+            @RequestHeader("X-Internal-API-Key") String apiKey) {
+        
+        // Verificar chave de API interna
+        if (!"ScenarioInternalAPIKey2024ForImagesCommunication".equals(apiKey)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        
+        List<EnvironmentImage> images = imageService.getImagesByEnvironment(environmentId);
+        return ResponseEntity.ok(images);
     }
 
     /**
@@ -266,7 +285,7 @@ public class ImageController {
             claims.put("exp", System.currentTimeMillis() + (expirationMinutes * 60 * 1000));
             
             String tempToken = tokenProvider.generateTokenWithClaims("image-download", claims, expirationMinutes * 60 * 1000);
-            String tempUrl = String.format("http://localhost:8081/api/images/secure-file/%s?token=%s", fileName, tempToken);
+            String tempUrl = String.format("http://localhost:8081/api/images/secure-file/%d/%s?token=%s", environmentId, fileName, tempToken);
             
             Map<String, Object> response = new HashMap<>();
             response.put("url", tempUrl);
@@ -287,12 +306,22 @@ public class ImageController {
     /**
      * Servir imagem com token temporário específico
      */
-    @GetMapping("/secure-file/{fileName}")
+    /**
+     * Endpoint de teste ultra-simples
+     */
+    @GetMapping("/test")
+    public ResponseEntity<String> test() {
+        return ResponseEntity.ok("Test OK");
+    }
+
+    @GetMapping("/secure-file/{environmentId}/{fileName}")
     @Operation(summary = "Download seguro de imagem", 
                description = "Faz download de uma imagem usando token temporário específico")
     public ResponseEntity<Resource> getSecureImageFile(
+            @PathVariable Long environmentId,
             @PathVariable String fileName,
             @RequestParam("token") String token) {
+        
         try {
             // Validar token
             if (!tokenProvider.validateToken(token)) {
@@ -300,9 +329,10 @@ public class ImageController {
             }
             
             // Extrair claims do token
-            Map<String, Object> claims = tokenProvider.getClaimsFromToken(token);
+            Claims claims = tokenProvider.getClaimsFromToken(token);
             String tokenFileName = (String) claims.get("fileName");
-            Long tokenEnvironmentId = Long.valueOf(claims.get("environmentId").toString());
+            Object envIdObj = claims.get("environmentId");
+            Long tokenEnvironmentId = envIdObj instanceof Integer ? ((Integer) envIdObj).longValue() : (Long) envIdObj;
             String tokenType = (String) claims.get("type");
             Long expiration = Long.valueOf(claims.get("exp").toString());
             
@@ -322,9 +352,18 @@ public class ImageController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
             
+            // Verificar se o environment ID da URL corresponde ao do token
+            if (!environmentId.equals(tokenEnvironmentId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            
             // Verificar se a imagem existe e pertence ao ambiente correto
             EnvironmentImage image = imageService.getImageInfoByFileName(fileName);
-            if (image == null || !image.getEnvironmentId().equals(tokenEnvironmentId)) {
+            if (image == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            if (!image.getEnvironmentId().equals(tokenEnvironmentId)) {
                 return ResponseEntity.notFound().build();
             }
             
@@ -345,7 +384,7 @@ public class ImageController {
                     .body(resource);
                     
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
@@ -394,21 +433,6 @@ public class ImageController {
         return ResponseEntity.ok(response);
     }
 
-    // Método auxiliar para determinar content type
-    private String determineContentType(String fileName) {
-        String extension = fileName.toLowerCase();
-        if (extension.endsWith(".jpg") || extension.endsWith(".jpeg")) {
-            return "image/jpeg";
-        } else if (extension.endsWith(".png")) {
-            return "image/png";
-        } else if (extension.endsWith(".gif")) {
-            return "image/gif";
-        } else if (extension.endsWith(".webp")) {
-            return "image/webp";
-        }
-        return "application/octet-stream";
-    }
-
     // Método auxiliar para extrair JWT do request
     private String getJwtFromRequest(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
@@ -416,5 +440,67 @@ public class ImageController {
             return bearerToken.substring(7);
         }
         return null;
+    }
+
+    /**
+     * Endpoint de teste para debug do JWT
+     */
+    @GetMapping("/debug/simple")
+    public ResponseEntity<Map<String, Object>> debugSimple() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Endpoint simples funcionando");
+        response.put("tokenProvider", tokenProvider != null ? "OK" : "NULL");
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/debug/token")
+    public ResponseEntity<Map<String, Object>> debugToken(@RequestParam("token") String token) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            System.out.println("🔍 DEBUG - Testando token: " + token.substring(0, 50) + "...");
+            System.out.println("🔧 DEBUG - TokenProvider: " + (tokenProvider != null ? "OK" : "NULL"));
+            
+            if (tokenProvider == null) {
+                response.put("error", "TokenProvider is null");
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            }
+            
+            boolean isValid = tokenProvider.validateToken(token);
+            response.put("isValid", isValid);
+            
+            if (isValid) {
+                Claims claims = tokenProvider.getClaimsFromToken(token);
+                response.put("subject", claims.getSubject());
+                response.put("fileName", claims.get("fileName"));
+                response.put("environmentId", claims.get("environmentId"));
+                response.put("type", claims.get("type"));
+                response.put("expiration", claims.getExpiration());
+            }
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.out.println("💥 Erro no debug do token: " + e.getMessage());
+            e.printStackTrace();
+            response.put("error", e.getMessage());
+            response.put("errorType", e.getClass().getSimpleName());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    private String determineContentType(String fileName) {
+        String extension = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
+        switch (extension) {
+            case "jpg":
+            case "jpeg":
+                return "image/jpeg";
+            case "png":
+                return "image/png";
+            case "gif":
+                return "image/gif";
+            case "webp":
+                return "image/webp";
+            default:
+                return "application/octet-stream";
+        }
     }
 }

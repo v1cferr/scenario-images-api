@@ -35,6 +35,7 @@ public class SecurityConfig {
                 // Endpoints públicos
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/images/health").permitAll()
+                .requestMatchers("/api/images/internal/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/api-docs/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()
                 
@@ -42,6 +43,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/images/environment/*/download").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/images/file/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/images/secure-file/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/images/test").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/images/debug/**").permitAll()
                 
                 // Geração de URLs temporárias
                 .requestMatchers(HttpMethod.POST, "/api/images/generate-temp-url").authenticated()
@@ -60,7 +63,8 @@ public class SecurityConfig {
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         // Para H2 Console
-        http.headers(headers -> headers.frameOptions().disable());
+        http.headers(headers -> headers
+                .frameOptions(frameOptions -> frameOptions.disable()));
 
         return http.build();
     }
