@@ -38,9 +38,13 @@ public class SecurityConfig {
                 .requestMatchers("/swagger-ui/**", "/api-docs/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()
                 
-                // Downloads de imagens públicos (para tags <img> funcionarem)
+                // Downloads de imagens com token específico
                 .requestMatchers(HttpMethod.GET, "/api/images/environment/*/download").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/images/file/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/images/secure-file/**").permitAll()
+                
+                // Geração de URLs temporárias
+                .requestMatchers(HttpMethod.POST, "/api/images/generate-temp-url").authenticated()
                 
                 // Uploads e operações de edição protegidas
                 .requestMatchers(HttpMethod.POST, "/api/images/upload").authenticated()

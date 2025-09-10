@@ -239,6 +239,117 @@ public class ImageController {
     }
 
     /**
+     * Gerar URL temporária para uma imagem específica
+     */
+    @PostMapping("/generate-temp-url")
+    @Operation(summary = "Gerar URL temporária", 
+               description = "Gera uma URL temporária com token para acesso seguro a uma imagem")
+    public ResponseEntity<?> generateTemporaryImageUrl(@RequestBody Map<String, Object> request) {
+        try {
+            Long environmentId = Long.valueOf(request.get("environmentId").toString());
+            String fileName = (String) request.get("fileName");
+            Integer expirationMinutes = (Integer) request.getOrDefault("expirationMinutes", 10);
+            
+            // Verificar se a imagem existe e pertence ao ambiente
+            EnvironmentImage image = imageService.getImageInfoByFileName(fileName);
+            if (image == null || !image.getEnvironmentId().equals(environmentId)) {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Imagem não encontrada ou não pertence ao ambiente especificado");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+            }
+            
+            // Gerar token específico para esta imagem
+            Map<String, Object> claims = new HashMap<>();
+            claims.put("environmentId", environmentId);
+            claims.put("fileName", fileName);
+            claims.put("type", "image-download");
+            claims.put("exp", System.currentTimeMillis() + (expirationMinutes * 60 * 1000));
+            
+            String tempToken = tokenProvider.generateTokenWithClaims("image-download", claims, expirationMinutes * 60 * 1000);
+            String tempUrl = String.format("http://localhost:8081/api/images/secure-file/%s?token=%s", fileName, tempToken);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("url", tempUrl);
+            response.put("fileName", fileName);
+            response.put("environmentId", environmentId);
+            response.put("expiresInMinutes", expirationMinutes);
+            response.put("token", tempToken);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Erro ao gerar URL temporária");
+            error.put("message", e.getMessage());
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
+    /**
+     * Servir imagem com token temporário específico
+     */
+    @GetMapping("/secure-file/{fileName}")
+    @Operation(summary = "Download seguro de imagem", 
+               description = "Faz download de uma imagem usando token temporário específico")
+    public ResponseEntity<Resource> getSecureImageFile(
+            @PathVariable String fileName,
+            @RequestParam("token") String token) {
+        try {
+            // Validar token
+            if (!tokenProvider.validateToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            
+            // Extrair claims do token
+            Map<String, Object> claims = tokenProvider.getClaimsFromToken(token);
+            String tokenFileName = (String) claims.get("fileName");
+            Long tokenEnvironmentId = Long.valueOf(claims.get("environmentId").toString());
+            String tokenType = (String) claims.get("type");
+            Long expiration = Long.valueOf(claims.get("exp").toString());
+            
+            // Verificar se o token não expirou
+            long currentTimeInSeconds = System.currentTimeMillis() / 1000;
+            if (currentTimeInSeconds > expiration) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            
+            // Verificar se é o tipo correto de token
+            if (!"image-download".equals(tokenType)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            
+            // Verificar se o arquivo do token corresponde ao solicitado
+            if (!fileName.equals(tokenFileName)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            
+            // Verificar se a imagem existe e pertence ao ambiente correto
+            EnvironmentImage image = imageService.getImageInfoByFileName(fileName);
+            if (image == null || !image.getEnvironmentId().equals(tokenEnvironmentId)) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Servir arquivo
+            File file = imageService.getPhysicalFile(fileName);
+            if (!file.exists()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Resource resource = new FileSystemResource(file);
+            String contentType = determineContentType(fileName);
+            
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                    .header("Access-Control-Allow-Origin", "*")
+                    .header("Cache-Control", "max-age=3600")
+                    .body(resource);
+                    
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+    }
+
+    /**
      * Deletar todas as imagens de um ambiente
      */
     @DeleteMapping("/environment/{environmentId}")

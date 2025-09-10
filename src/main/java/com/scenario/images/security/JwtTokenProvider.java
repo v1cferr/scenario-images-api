@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
+import java.util.Map;
 
 @Component
 public class JwtTokenProvider {
@@ -76,5 +77,29 @@ public class JwtTokenProvider {
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
+    }
+
+    /**
+     * Gerar token JWT com claims customizados
+     */
+    public String generateTokenWithClaims(String subject, Map<String, Object> claims, long expirationMillis) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + expirationMillis);
+
+        return Jwts.builder()
+                .setSubject(subject)
+                .addClaims(claims)
+                .setIssuedAt(now)
+                .setExpiration(expiryDate)
+                .signWith(getSigningKey(), SignatureAlgorithm.HS512)
+                .compact();
+    }
+
+    /**
+     * Extrair claims customizados do token como Map
+     */
+    public Map<String, Object> getClaimsFromTokenAsMap(String token) {
+        Claims claims = getClaimsFromToken(token);
+        return claims;
     }
 }
