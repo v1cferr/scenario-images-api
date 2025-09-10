@@ -2,6 +2,7 @@ com\scenario\images\config\SwaggerConfig.class
 com\scenario\images\ScenarioImagesApiApplication.class
 com\scenario\images\security\JwtTokenProvider.class
 com\scenario\images\service\ImageService.class
+com\scenario\images\config\ImageSyncConfig.class
 com\scenario\images\security\SecurityConfig.class
 com\scenario\images\controller\ImageController.class
 com\scenario\images\model\EnvironmentImage.class
